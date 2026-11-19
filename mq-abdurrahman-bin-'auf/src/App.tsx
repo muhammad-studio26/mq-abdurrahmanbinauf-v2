@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Award,
   BookOpen,
@@ -15,14 +15,16 @@ import { StudySetupView } from './components/StudySetupView';
 import { QuizActiveView, QuizResultView } from './components/QuizView';
 import { RaporView } from './components/RaporView';
 import { GuruDashboardView, GuruLoginView } from './components/GuruView';
+import { INITIAL_SANTRI_LIST } from './data/questions';
 import {
-  DEFAULT_AGAMA_QUESTIONS,
-  INITIAL_SANTRI_LIST,
-  TINGKATAN_INFO
-} from './data/questions';
+  generateAgamaQuestions,
+  generateSambungAyatQuestions
+} from './utils/sambungAyat';
 import {
+  discoverSupabaseStorageLogoUrl,
   formatSupabaseError,
   getSupabaseClient,
+  resolveSupabaseLogoUrl,
   supabaseFetch
 } from './utils/supabase';
 import type {
@@ -44,18 +46,6 @@ const DEFAULT_SUPABASE_KEY =
 const DEFAULT_LOGO_URL = '';
 
 const GURU_SESSION_KEY = 'mq_guru_session';
-
-interface AlQuranAyah {
-  number: number;
-  numberInSurah: number;
-  text: string;
-  audio?: string;
-  surah: {
-    number: number;
-    name: string;
-    englishName: string;
-  };
-}
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewName>('auth');
@@ -97,6 +87,8 @@ export default function App() {
   const [logoUrl, setLogoUrl] = useState(
     () => localStorage.getItem('mq_logo_url') || DEFAULT_LOGO_URL
   );
+  const [discoveredLogoUrl, setDiscoveredLogoUrl] = useState('');
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [localScores, setLocalScores] = useState<ScoreRecord[]>([]);
   const [santriList, setSantriList] = useState<SantriRecord[]>([]);
   const [allScores, setAllScores] = useState<ScoreRecord[]>([]);
@@ -124,6 +116,35 @@ export default function App() {
   const isGuruAdmin = Boolean(
     guruSession && guruSession.peran.trim().toLowerCase() === 'admin'
   );
+
+  // Resolve manual logo input (full URL or Supabase Storage bucket/path) or auto-discovered Supabase Storage public URL
+  const resolvedLogoUrl = useMemo(() => {
+    const manualResolved = resolveSupabaseLogoUrl(sbUrl, sbKey, logoUrl);
+    return manualResolved || discoveredLogoUrl;
+  }, [sbUrl, sbKey, logoUrl, discoveredLogoUrl]);
+
+  const effectiveLogoUrl = logoLoadFailed ? '' : resolvedLogoUrl;
+
+  useEffect(() => {
+    setLogoLoadFailed(false);
+  }, [resolvedLogoUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isSupabaseConfigured || logoUrl.trim()) {
+      return;
+    }
+
+    discoverSupabaseStorageLogoUrl(sbUrl, sbKey).then((publicUrl) => {
+      if (!cancelled && publicUrl) {
+        setDiscoveredLogoUrl(publicUrl);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSupabaseConfigured, sbUrl, sbKey, logoUrl]);
 
   const showNotice = useCallback(
     (type: NoticeBanner['type'], message: string) => {
@@ -357,108 +378,22 @@ export default function App() {
 
     try {
       if (activeQuizType === 'Pengetahuan Agama') {
-        const bank = [
-          ...(DEFAULT_AGAMA_QUESTIONS[user.tingkatan] ||
-            DEFAULT_AGAMA_QUESTIONS.Dasar)
-        ];
-        for (let i = bank.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [bank[i], bank[j]] = [bank[j], bank[i]];
-        }
-        const generated: QuizQuestion[] = [];
-        for (let i = 0; i < activeCount; i++) {
-          const item = bank[i % bank.length];
-          generated.push({ ...item, id: `${item.id}-${i}` });
-        }
+        const generated = generateAgamaQuestions(
+          user,
+          user.tingkatan,
+          activeCount
+        );
         setQuestions(generated);
         setCurrentView('quiz_active');
         return;
       }
 
-      const allowedJuz = TINGKATAN_INFO[user.tingkatan].juzRange;
-      const randomJuz =
-        allowedJuz[Math.floor(Math.random() * allowedJuz.length)];
-
-      const [arabRes, audioRes] = await Promise.all([
-        fetch(`https://api.alquran.cloud/v1/juz/${randomJuz}/quran-uthmani`),
-        fetch(`https://api.alquran.cloud/v1/juz/${randomJuz}/ar.alafasy`)
-      ]);
-
-      if (!arabRes.ok || !audioRes.ok) {
-        throw new Error('Server Al-Qur’an tidak merespons.');
-      }
-
-      const arabData = (await arabRes.json()) as {
-        data?: { ayahs?: AlQuranAyah[] };
-      };
-      const audioData = (await audioRes.json()) as {
-        data?: { ayahs?: AlQuranAyah[] };
-      };
-
-      const ayahsArab = arabData?.data?.ayahs || [];
-      const ayahsAudio = audioData?.data?.ayahs || [];
-
-      const validIndices: number[] = [];
-      for (let idx = 0; idx < ayahsArab.length - 1; idx++) {
-        if (ayahsArab[idx].surah.number === ayahsArab[idx + 1].surah.number) {
-          validIndices.push(idx);
-        }
-      }
-
-      if (validIndices.length < 4) {
-        throw new Error('Data ayat pada juz terpilih tidak mencukupi.');
-      }
-
-      for (let i = validIndices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [validIndices[i], validIndices[j]] = [validIndices[j], validIndices[i]];
-      }
-
-      const targetCount = Math.min(activeCount, validIndices.length);
-      const generatedQuestions: QuizQuestion[] = [];
-
-      for (let i = 0; i < targetCount; i++) {
-        const idx = validIndices[i];
-        const currentAyah = ayahsArab[idx];
-        const nextAyah = ayahsArab[idx + 1];
-        const audioItem = ayahsAudio[idx];
-
-        const distractors: string[] = [];
-        let attempts = 0;
-        while (distractors.length < 3 && attempts < 80) {
-          attempts++;
-          const randIdx = Math.floor(Math.random() * ayahsArab.length);
-          const candidateText = ayahsArab[randIdx].text;
-          if (
-            randIdx !== idx &&
-            randIdx !== idx + 1 &&
-            candidateText !== nextAyah.text &&
-            !distractors.includes(candidateText)
-          ) {
-            distractors.push(candidateText);
-          }
-        }
-
-        const allOptions = [nextAyah.text, ...distractors];
-        for (let j = allOptions.length - 1; j > 0; j--) {
-          const k = Math.floor(Math.random() * (j + 1));
-          [allOptions[j], allOptions[k]] = [allOptions[k], allOptions[j]];
-        }
-
-        const correctIdx = allOptions.indexOf(nextAyah.text);
-
-        generatedQuestions.push({
-          id: `q-${i}-${currentAyah.number}`,
-          surahName: `${currentAyah.surah.englishName} (${currentAyah.surah.name})`,
-          ayahNumber: currentAyah.numberInSurah,
-          questionText: `Lanjutkan potongan ayat dari QS. ${currentAyah.surah.englishName} ayat ${currentAyah.numberInSurah} berikut ini:`,
-          arabicPrompt: currentAyah.text,
-          audioUrl: audioItem?.audio || '',
-          options: allOptions,
-          correctIndex: correctIdx,
-          explanation: `Jawaban yang tepat adalah QS. ${nextAyah.surah.englishName} ayat ${nextAyah.numberInSurah}.`
-        });
-      }
+      const effectiveTingkatan: Tingkatan = isGuest ? 'Dasar' : user.tingkatan;
+      const generatedQuestions = await generateSambungAyatQuestions(
+        user,
+        effectiveTingkatan,
+        activeCount
+      );
 
       setQuestions(generatedQuestions);
       setCurrentView('quiz_active');
@@ -780,9 +715,29 @@ export default function App() {
       );
       return;
     }
-    localStorage.setItem('mq_sb_url', sbUrl.trim());
-    localStorage.setItem('mq_sb_key', sbKey.trim());
-    localStorage.setItem('mq_logo_url', logoUrl.trim());
+    const cleanSbUrl = sbUrl.trim();
+    const cleanSbKey = sbKey.trim();
+    const rawLogo = logoUrl.trim();
+    const normalizedLogo = rawLogo
+      ? resolveSupabaseLogoUrl(cleanSbUrl, cleanSbKey, rawLogo)
+      : '';
+
+    if (rawLogo && !normalizedLogo) {
+      showNotice(
+        'error',
+        'Format URL atau path logo tidak valid. Gunakan URL publik lengkap atau path bucket Supabase Storage (misalnya assets/logo.png).'
+      );
+      return;
+    }
+
+    localStorage.setItem('mq_sb_url', cleanSbUrl);
+    localStorage.setItem('mq_sb_key', cleanSbKey);
+    localStorage.setItem('mq_logo_url', normalizedLogo);
+    setLogoUrl(normalizedLogo);
+    setLogoLoadFailed(false);
+    if (!normalizedLogo) {
+      setDiscoveredLogoUrl('');
+    }
     showNotice(
       'success',
       'Pengaturan Supabase & Logo Markaz berhasil disimpan.'
@@ -798,7 +753,8 @@ export default function App() {
     <div className="min-h-screen bg-[#F8FAFC] text-[#0A192F] flex flex-col">
       <Header
         user={user}
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogoUrl}
+        onLogoError={() => setLogoLoadFailed(true)}
         currentView={currentView}
         isGuruLoggedIn={isGuruLoggedIn}
         drawerOpen={drawerOpen}
@@ -1014,6 +970,7 @@ export default function App() {
               sbKey={sbKey}
               setSbKey={setSbKey}
               logoUrl={logoUrl}
+              resolvedLogoUrl={effectiveLogoUrl}
               setLogoUrl={setLogoUrl}
               onSyncSupabase={syncFromSupabase}
               onRefreshPengajar={fetchPengajarList}
