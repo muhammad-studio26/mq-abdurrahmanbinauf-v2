@@ -1,0 +1,1878 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Menu, X, Home, UserCheck, Shield, LogOut, Info, Lock,
+  BookOpen, Award, Sparkles, ArrowLeft, ArrowRight, Play,
+  Pause, CheckCircle2, XCircle, Plus, Trash2, Users,
+  Database, Volume2, RefreshCw, Trophy, FileText, Settings
+} from 'lucide-react';
+
+// ==========================================
+// KONFIGURASI SUPABASE & TEMA
+// ==========================================
+// Masukkan URL dan Anon Key Supabase Anda di sini (atau atur lewat Panel Guru di dalam aplikasi)
+const DEFAULT_SUPABASE_URL = ''; 
+const DEFAULT_SUPABASE_KEY = '';
+
+// Ganti URL logo di bawah ini dengan link foto logo Markaz Anda
+const DEFAULT_LOGO_URL = ''; 
+
+type Tingkatan = 'Dasar' | 'Menengah' | 'Mahir';
+
+interface UserProfile {
+  mode: 'guest' | 'santri';
+  kode_santri?: string;
+  nama: string;
+  tingkatan: Tingkatan;
+}
+
+interface QuizQuestion {
+  id: string;
+  surahName?: string;
+  ayahNumber?: number;
+  questionText: string;
+  arabicPrompt?: string;
+  audioUrl?: string;
+  options: string[];
+  correctIndex: number;
+  explanation?: string;
+}
+
+// ==========================================
+// BANK SOAL PENGETAHUAN AGAMA BAWAAN
+// ==========================================
+const DEFAULT_AGAMA_QUESTIONS: Record<Tingkatan, QuizQuestion[]> = {
+  Dasar: [
+    {
+      id: 'ag-1',
+      questionText: 'Berapakah jumlah surah di dalam Al-Qur’an?',
+      options: ['112 Surah', '114 Surah', '116 Surah', '30 Surah'],
+      correctIndex: 1,
+      explanation: 'Al-Qur’an terdiri dari 30 Juz dan 114 Surah, dimulai dari Al-Fatihah hingga An-Nas.'
+    },
+    {
+      id: 'ag-2',
+      questionText: 'Hukum bacaan apabila terdapat Nun Sukun (نْ) atau Tanwin bertemu huruf Ba (ب) disebut...',
+      options: ['Idzhar Halqi', 'Idgham Bighunnah', 'Iqlab', 'Ikhfa Haqiqi'],
+      correctIndex: 2,
+      explanation: 'Iqlab berarti membalik atau mengganti bunyi nun sukun/tanwin menjadi mim disertai dengung.'
+    },
+    {
+      id: 'ag-3',
+      questionText: 'Sahabat Nabi ﷺ yang termasuk dalam 10 orang yang dijamin masuk surga dan terkenal sangat dermawan adalah...',
+      options: ['Abdurrahman bin ’Auf', 'Abu Jahal', 'Khalid bin Walid', 'Bilal bin Rabah'],
+      correctIndex: 0,
+      explanation: 'Abdurrahman bin ’Auf radhiyallahu ’anhu termasuk As-Sabiqunal Awwalun dan Al-Asyarah Al-Mubasysyarun bil Jannah.'
+    },
+    {
+      id: 'ag-4',
+      questionText: 'Surah apakah yang wajib dibaca pada setiap rakaat shalat?',
+      options: ['Al-Ikhlas', 'Al-Baqarah', 'Al-Fatihah', 'An-Nas'],
+      correctIndex: 2,
+      explanation: 'Membaca Surah Al-Fatihah merupakan salah satu rukun shalat di setiap rakaat.'
+    },
+    {
+      id: 'ag-5',
+      questionText: 'Tempat keluarnya huruf-huruf hijaiyah ketika dibaca disebut...',
+      options: ['Sifatul Huruf', 'Makharijul Huruf', 'Ahkamul Huruf', 'Mad Far’i'],
+      correctIndex: 1,
+      explanation: 'Makharijul Huruf adalah tempat-tempat keluarnya huruf hijaiyah.'
+    }
+  ],
+  Menengah: [
+    {
+      id: 'ag-m1',
+      questionText: 'Berapa panjang harakat bacaan Mad Wajib Muttashil menurut riwayat Hafsh ’an ’Ashim?',
+      options: ['2 Harakat', '4 atau 5 Harakat', '6 Harakat', '1 Harakat'],
+      correctIndex: 1,
+      explanation: 'Mad Wajib Muttashil dibaca 4 atau 5 harakat ketika washal.'
+    },
+    {
+      id: 'ag-m2',
+      questionText: 'Siapakah ketua tim kodifikasi (pengumpulan) mushaf Al-Qur’an pada masa Khalifah Abu Bakar dan Utsman bin Affan?',
+      options: ['Zaid bin Tsabit', 'Abdullah bin Mas’ud', 'Mu’adz bin Jabal', 'Ubay bin Ka’ab'],
+      correctIndex: 0,
+      explanation: 'Zaid bin Tsabit radhiyallahu ’anhu adalah penulis wahyu utama yang memimpin pengumpulan mushaf.'
+    },
+    {
+      id: 'ag-m3',
+      questionText: 'Huruf Qalqalah berjumlah lima, yang dikumpulkan dalam kalimat...',
+      options: ['Yanmu (ينمو)', 'Quthbu Jadin (قطب جد)', 'Khashsha Dhaqthin Qizh (خص ضغط قظ)', 'Lin ’Umar (لن عمر)'],
+      correctIndex: 1,
+      explanation: 'Lima huruf Qalqalah adalah Qaf, Tha, Ba, Jim, dan Dal (قطب جد).'
+    },
+    {
+      id: 'ag-m4',
+      questionText: 'Surah di dalam Al-Qur’an yang tidak diawali dengan lafaz Basmalah adalah...',
+      options: ['Surah Al-Anfal', 'Surah At-Taubah', 'Surah An-Naml', 'Surah Yasin'],
+      correctIndex: 1,
+      explanation: 'Surah At-Taubah (Bara’ah) adalah satu-satunya surah yang tidak diawali dengan Basmalah.'
+    },
+    {
+      id: 'ag-m5',
+      questionText: 'Berhenti sejenak tanpa mengambil napas saat membaca ayat tertentu dalam Al-Qur’an disebut...',
+      options: ['Waqaf Tam', 'Saktah', 'Imalah', 'Isymam'],
+      correctIndex: 1,
+      explanation: 'Saktah adalah berhenti sejenak sekitar 2 harakat tanpa bernapas.'
+    }
+  ],
+  Mahir: [
+    {
+      id: 'ag-h1',
+      questionText: 'Pada Surah Hud ayat 41, kata "مَجْر۪ىهَا" dibaca dengan memiringkan fathah ke arah kasrah yang disebut...',
+      options: ['Tashil', 'Imalah', 'Isymam', 'Naql'],
+      correctIndex: 1,
+      explanation: 'Imalah Kubra pada lafaz Majreha adalah satu-satunya bacaan Imalah dalam riwayat Hafsh.'
+    },
+    {
+      id: 'ag-h2',
+      questionText: 'Pada Surah Yusuf ayat 11, kata "لَا تَأْمَنَّا" memiliki hukum bacaan gharib yaitu...',
+      options: ['Isymam / Raum', 'Saktah', 'Naql', 'Badal'],
+      correctIndex: 0,
+      explanation: 'Pada lafaz Laa Ta’mannaa terdapat bacaan Isymam (memoncongkan bibir tanpa suara) atau Raum.'
+    },
+    {
+      id: 'ag-h3',
+      questionText: 'Pada Surah Al-Hujurat ayat 11, kata "بِئْسَ الِاسْمُ" dibaca "Bi’sal-ismu" karena terjadi proses...',
+      options: ['Naql', 'Tashil', 'Ibdal', 'Saktah'],
+      correctIndex: 0,
+      explanation: 'Naql adalah memindahkan harakat hamzah ke huruf sukun sebelumnya.'
+    },
+    {
+      id: 'ag-h4',
+      questionText: 'Berapakah jumlah tempat السَّكْتَة (Saktah) yang disepakati pada riwayat Hafsh ’an ’Ashim jalur Syathibiyyah?',
+      options: ['2 Tempat', '4 Tempat', '6 Tempat', '7 Tempat'],
+      correctIndex: 1,
+      explanation: 'Terdapat 4 tempat saktah wajib/masyhur: Al-Kahfi: 1-2, Yasin: 52, Al-Qiyamah: 27, dan Al-Muthaffifin: 14.'
+    },
+    {
+      id: 'ag-h5',
+      questionText: 'Bacaan Tashil dalam riwayat Hafsh ’an ’Ashim hanya terdapat pada satu tempat, yaitu...',
+      options: ['QS. Fushshilat Ayat 44 (ءَأَعْجَمِيٌّ)', 'QS. Al-Ahqaf Ayat 4', 'QS. Al-Baqarah Ayat 245', 'QS. Maryam Ayat 1'],
+      correctIndex: 0,
+      explanation: 'Tashil (meringankan hamzah kedua) terdapat pada lafaz A’a’jamiyyun di QS. Fushshilat ayat 44.'
+    }
+  ]
+};
+
+// ==========================================
+// INFORMASI CAKUPAN JUZ PER TINGKATAN
+// ==========================================
+const TINGKATAN_INFO: Record<Tingkatan, { label: string; juzRange: number[]; desc: string }> = {
+  Dasar: {
+    label: 'Dasar',
+    juzRange: [29, 30],
+    desc: 'Juz 29 & 30 (Juz Tabarak & ’Amma)'
+  },
+  Menengah: {
+    label: 'Menengah',
+    juzRange: [21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
+    desc: 'Juz 21 – 30 (10 Juz)'
+  },
+  Mahir: {
+    label: 'Mahir',
+    juzRange: Array.from({ length: 30 }, (_, i) => i + 1),
+    desc: 'Juz 1 – 30 (Lengkap 30 Juz)'
+  }
+};
+
+export default function App() {
+  // Navigation & Drawer State
+  const [currentView, setCurrentView] = useState<
+    'auth' | 'home' | 'study_setup' | 'quiz_active' | 'quiz_result' | 'rapor' | 'guru_login' | 'guru_dashboard' | 'about'
+  >('auth');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Auth / Onboarding State
+  const [authTab, setAuthTab] = useState<'guest' | 'santri'>('guest');
+  const [guestName, setGuestName] = useState('');
+  const [guestTingkatan, setGuestTingkatan] = useState<Tingkatan>('Dasar');
+  const [kodeSantriInput, setKodeSantriInput] = useState('');
+  const [pinSantriInput, setPinSantriInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Active User State
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  // Study Setup State
+  const [studyMode, setStudyMode] = useState<'Latihan Bebas' | 'Ujian / Setoran'>('Latihan Bebas');
+  const [quizType, setQuizType] = useState<'Sambung Ayat' | 'Pengetahuan Agama'>('Sambung Ayat');
+  const [questionCount, setQuestionCount] = useState<5 | 10 | 40>(5);
+
+  // Active Quiz State
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [currentQIndex, setCurrentQIndex] = useState(0);
+  const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [userAnswers, setUserAnswers] = useState<number[]>([]);
+  const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Records & Database State
+  const [sbUrl, setSbUrl] = useState(() => localStorage.getItem('mq_sb_url') || DEFAULT_SUPABASE_URL);
+  const [sbKey, setSbKey] = useState(() => localStorage.getItem('mq_sb_key') || DEFAULT_SUPABASE_KEY);
+  const [logoUrl, setLogoUrl] = useState(() => localStorage.getItem('mq_logo_url') || DEFAULT_LOGO_URL);
+  const [localScores, setLocalScores] = useState<any[]>([]);
+  const [santriList, setSantriList] = useState<any[]>([]);
+  const [allScores, setAllScores] = useState<any[]>([]);
+
+  // Teacher Panel State
+  const [guruEmail, setGuruEmail] = useState('');
+  const [guruPass, setGuruPass] = useState('');
+  const [isGuruLoggedIn, setIsGuruLoggedIn] = useState(false);
+  const [guruTab, setGuruTab] = useState<'rapor' | 'santri' | 'pengaturan'>('rapor');
+  const [newSantriKode, setNewSantriKode] = useState('');
+  const [newSantriNama, setNewSantriNama] = useState('');
+  const [newSantriPin, setNewSantriPin] = useState('');
+  const [newSantriTingkatan, setNewSantriTingkatan] = useState<Tingkatan>('Dasar');
+
+  // Helper: Cek apakah Supabase sudah terhubung
+  const isSupabaseConfigured = Boolean(sbUrl && sbKey);
+
+  // Helper: Panggil REST API Supabase tanpa perlu install SDK tambahan
+  const supabaseFetch = async (table: string, options: RequestInit = {}, query = '') => {
+    if (!isSupabaseConfigured) return null;
+    const res = await fetch(`${sbUrl}/rest/v1/${table}${query}`, {
+      ...options,
+      headers: {
+        apikey: sbKey,
+        Authorization: `Bearer ${sbKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+        ...(options.headers || {})
+      }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  };
+
+  // Load profil & riwayat lokal saat aplikasi dibuka
+  useEffect(() => {
+    const savedUser = localStorage.getItem('mq_user_profile');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        setCurrentView('home');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const savedScores = localStorage.getItem('mq_local_scores');
+    if (savedScores) {
+      try {
+        setLocalScores(JSON.parse(savedScores));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Inisialisasi daftar santri lokal jika belum ada
+    const savedSantri = localStorage.getItem('mq_local_santri');
+    if (!savedSantri) {
+      const initialSantri = [
+        { kode_santri: 'MQ-001', pin_santri: '1234', nama_lengkap: 'Yasir Abdurrahman', tingkatan: 'Dasar' },
+        { kode_santri: 'MQ-002', pin_santri: '1234', nama_lengkap: 'Ahmad Fauzan', tingkatan: 'Menengah' },
+        { kode_santri: 'MQ-003', pin_santri: '1234', nama_lengkap: 'Zaid bin Tsabit', tingkatan: 'Mahir' }
+      ];
+      localStorage.setItem('mq_local_santri', JSON.stringify(initialSantri));
+      setSantriList(initialSantri);
+    } else {
+      setSantriList(JSON.parse(savedSantri));
+    }
+  }, []);
+
+  // Sinkronisasi data dari Supabase jika sudah terhubung
+  const syncFromSupabase = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const sData = await supabaseFetch('mq_santri', { method: 'GET' }, '?select=*&order=created_at.desc');
+      if (sData) setSantriList(sData);
+      const nData = await supabaseFetch('mq_nilai', { method: 'GET' }, '?select=*&order=created_at.desc');
+      if (nData) setAllScores(nData);
+    } catch (err) {
+      console.warn('Gagal sinkronisasi Supabase, menggunakan penyimpanan lokal:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      syncFromSupabase();
+    }
+  }, [sbUrl, sbKey]);
+
+  // ==========================================
+  // FUNGSI LOGIN GUEST & SANTRI
+  // ==========================================
+  const handleGuestSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestName.trim()) {
+      setAuthError('Silakan tuliskan nama lengkapmu terlebih dahulu.');
+      return;
+    }
+    const newProfile: UserProfile = {
+      mode: 'guest',
+      nama: guestName.trim(),
+      tingkatan: guestTingkatan
+    };
+    setUser(newProfile);
+    localStorage.setItem('mq_user_profile', JSON.stringify(newProfile));
+    setAuthError('');
+    setCurrentView('home');
+  };
+
+  const handleSantriLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!kodeSantriInput.trim() || !pinSantriInput.trim()) {
+      setAuthError('Masukkan Kode Santri dan PIN terlebih dahulu.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      let foundSantri = null;
+
+      if (isSupabaseConfigured) {
+        const res = await supabaseFetch(
+          'mq_santri',
+          { method: 'GET' },
+          `?kode_santri=eq.${encodeURIComponent(kodeSantriInput.trim().toUpperCase())}&pin_santri=eq.${encodeURIComponent(pinSantriInput.trim())}&select=*`
+        );
+        if (res && res.length > 0) foundSantri = res[0];
+      }
+
+      // Fallback ke daftar santri lokal (contoh: MQ-001 / PIN: 1234)
+      if (!foundSantri) {
+        foundSantri = santriList.find(
+          (s) =>
+            s.kode_santri.toUpperCase() === kodeSantriInput.trim().toUpperCase() &&
+            s.pin_santri === pinSantriInput.trim()
+        );
+      }
+
+      if (!foundSantri) {
+        setAuthError('Kode santri atau PIN tidak ditemukan. (Contoh tes: MQ-001, PIN: 1234)');
+        setIsLoading(false);
+        return;
+      }
+
+      const newProfile: UserProfile = {
+        mode: 'santri',
+        kode_santri: foundSantri.kode_santri,
+        nama: foundSantri.nama_lengkap,
+        tingkatan: foundSantri.tingkatan as Tingkatan
+      };
+      setUser(newProfile);
+      localStorage.setItem('mq_user_profile', JSON.stringify(newProfile));
+      setCurrentView('home');
+    } catch (err) {
+      setAuthError('Terjadi gangguan saat memeriksa akun santri.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('mq_user_profile');
+    setUser(null);
+    setDrawerOpen(false);
+    setCurrentView('auth');
+  };
+
+  // ==========================================
+  // GENERATOR KUIS SAMBUNG AYAT 30 JUZ (API ALQURAN.CLOUD)
+  // ==========================================
+  const startQuiz = async () => {
+    if (!user) return;
+    setIsGeneratingQuiz(true);
+    setSelectedOption(null);
+    setIsAnswerSubmitted(false);
+    setCurrentQIndex(0);
+    setUserAnswers([]);
+
+    try {
+      if (quizType === 'Pengetahuan Agama') {
+        const bank = DEFAULT_AGAMA_QUESTIONS[user.tingkatan] || DEFAULT_AGAMA_QUESTIONS.Dasar;
+        const generated: QuizQuestion[] = [];
+        for (let i = 0; i < questionCount; i++) {
+          const item = bank[i % bank.length];
+          generated.push({ ...item, id: `${item.id}-${i}` });
+        }
+        setQuestions(generated);
+        setCurrentView('quiz_active');
+        setIsGeneratingQuiz(false);
+        return;
+      }
+
+      // Jika Kuis Hafalan - Sambung Ayat (Sesuai Tingkatan Juz)
+      const allowedJuz = TINGKATAN_INFO[user.tingkatan].juzRange;
+      // Pilih 1 atau 2 Juz secara acak dari rentang tingkatan santri agar pengambilan ayat super cepat
+      const randomJuz = allowedJuz[Math.floor(Math.random() * allowedJuz.length)];
+
+      // Ambil teks Arab Utsmani & Audio Murottal Mishary Rashid Al-Afasy
+      const [arabRes, audioRes] = await Promise.all([
+        fetch(`https://api.alquran.cloud/v1/juz/${randomJuz}/quran-uthmani`),
+        fetch(`https://api.alquran.cloud/v1/juz/${randomJuz}/ar.alafasy`)
+      ]);
+
+      const arabData = await arabRes.json();
+      const audioData = await audioRes.json();
+
+      const ayahsArab = arabData?.data?.ayahs || [];
+      const ayahsAudio = audioData?.data?.ayahs || [];
+
+      if (ayahsArab.length < 10) {
+        throw new Error('Data ayat tidak mencukupi');
+      }
+
+      const generatedQuestions: QuizQuestion[] = [];
+      const usedIndices = new Set<number>();
+
+      for (let i = 0; i < questionCount; i++) {
+        // Cari indeks ayat acak yang memiliki ayat lanjutan di surah yang sama
+        let idx = Math.floor(Math.random() * (ayahsArab.length - 5));
+        let safety = 0;
+        while (
+          (usedIndices.has(idx) ||
+            ayahsArab[idx].surah.number !== ayahsArab[idx + 1]?.surah?.number) &&
+          safety < 50
+        ) {
+          idx = Math.floor(Math.random() * (ayahsArab.length - 5));
+          safety++;
+        }
+        usedIndices.add(idx);
+
+        const currentAyah = ayahsArab[idx];
+        const nextAyah = ayahsArab[idx + 1];
+        const audioItem = ayahsAudio[idx];
+
+        // Buat 3 pengecoh (distractor) dari ayat lain di Juz yang sama
+        const distractors: string[] = [];
+        while (distractors.length < 3) {
+          const randIdx = Math.floor(Math.random() * ayahsArab.length);
+          const candidateText = ayahsArab[randIdx].text;
+          if (
+            randIdx !== idx &&
+            randIdx !== idx + 1 &&
+            candidateText !== nextAyah.text &&
+            !distractors.includes(candidateText)
+          ) {
+            distractors.push(candidateText);
+          }
+        }
+
+        // Acak posisi pilihan jawaban A, B, C, D
+        const allOptions = [nextAyah.text, ...distractors];
+        for (let j = allOptions.length - 1; j > 0; j--) {
+          const k = Math.floor(Math.random() * (j + 1));
+          [allOptions[j], allOptions[k]] = [allOptions[k], allOptions[j]];
+        }
+
+        const correctIdx = allOptions.indexOf(nextAyah.text);
+
+        generatedQuestions.push({
+          id: `q-${i}-${currentAyah.number}`,
+          surahName: `${currentAyah.surah.englishName} (${currentAyah.surah.name})`,
+          ayahNumber: currentAyah.numberInSurah,
+          questionText: `Lanjutkan potongan ayat dari QS. ${currentAyah.surah.englishName} ayat ${currentAyah.numberInSurah} berikut ini:`,
+          arabicPrompt: currentAyah.text,
+          audioUrl: audioItem?.audio || '',
+          options: allOptions,
+          correctIndex: correctIdx,
+          explanation: `Jawaban yang tepat adalah QS. ${nextAyah.surah.englishName} ayat ${nextAyah.numberInSurah}.`
+        });
+      }
+
+      setQuestions(generatedQuestions);
+      setCurrentView('quiz_active');
+    } catch (error) {
+      alert('Gagal memuat ayat dari server Al-Qur’an. Pastikan internet aktif.');
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+
+  // Putar Audio Murottal
+  const toggleAudio = (url?: string) => {
+    if (!url) return;
+    if (audioRef.current) {
+      if (isPlayingAudio) {
+        audioRef.current.pause();
+        setIsPlayingAudio(false);
+      } else {
+        audioRef.current.src = url;
+        audioRef.current.play();
+        setIsPlayingAudio(true);
+      }
+    }
+  };
+
+  // Simpan Jawaban & Selesaikan Kuis
+  const handleSelectOption = (idx: number) => {
+    if (studyMode === 'Latihan Bebas' && isAnswerSubmitted) return;
+    setSelectedOption(idx);
+    if (studyMode === 'Latihan Bebas') {
+      setIsAnswerSubmitted(true);
+    }
+  };
+
+  const handleNextQuestion = async () => {
+    if (selectedOption === null) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlayingAudio(false);
+    }
+
+    const updatedAnswers = [...userAnswers, selectedOption];
+    setUserAnswers(updatedAnswers);
+
+    if (currentQIndex + 1 < questions.length) {
+      setCurrentQIndex(currentQIndex + 1);
+      setSelectedOption(null);
+      setIsAnswerSubmitted(false);
+    } else {
+      // Hitung Skor Akhir
+      let correctCount = 0;
+      questions.forEach((q, i) => {
+        if (updatedAnswers[i] === q.correctIndex) correctCount++;
+      });
+      const finalScore = Math.round((correctCount / questions.length) * 100);
+
+      const newRecord = {
+        kode_santri: user?.kode_santri || 'GUEST',
+        nama_santri: user?.nama || 'Santri Guest',
+        tingkatan: user?.tingkatan || 'Dasar',
+        mode_belajar: studyMode,
+        jenis_kuis: quizType,
+        jumlah_soal: questions.length,
+        benar: correctCount,
+        skor: finalScore,
+        created_at: new Date().toISOString()
+      };
+
+      const updatedLocal = [newRecord, ...localScores];
+      setLocalScores(updatedLocal);
+      localStorage.setItem('mq_local_scores', JSON.stringify(updatedLocal));
+
+      // Jika Mode Ujian / Setoran atau terhubung Supabase, simpan ke tabel mq_nilai
+      if (isSupabaseConfigured) {
+        try {
+          await supabaseFetch('mq_nilai', {
+            method: 'POST',
+            body: JSON.stringify(newRecord)
+          });
+          syncFromSupabase();
+        } catch (e) {
+          console.warn('Gagal kirim nilai ke Supabase:', e);
+        }
+      }
+
+      setCurrentView('quiz_result');
+    }
+  };
+
+  // ==========================================
+  // FUNGSI PANEL GURU
+  // ==========================================
+  const handleGuruLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (guruEmail.trim() && guruPass.trim()) {
+      setIsGuruLoggedIn(true);
+      setCurrentView('guru_dashboard');
+      syncFromSupabase();
+    } else {
+      alert('Masukkan email dan kata sandi guru.');
+    }
+  };
+
+  const handleAddSantri = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSantriKode || !newSantriNama || !newSantriPin) return;
+    const item = {
+      kode_santri: newSantriKode.toUpperCase().trim(),
+      nama_lengkap: newSantriNama.trim(),
+      pin_santri: newSantriPin.trim(),
+      tingkatan: newSantriTingkatan
+    };
+
+    const updated = [item, ...santriList];
+    setSantriList(updated);
+    localStorage.setItem('mq_local_santri', JSON.stringify(updated));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabaseFetch('mq_santri', {
+          method: 'POST',
+          body: JSON.stringify(item)
+        });
+        syncFromSupabase();
+      } catch (err) {
+        alert('Tersimpan di perangkat lokal. Pastikan tabel mq_santri sudah dibuat di Supabase.');
+      }
+    }
+
+    setNewSantriKode('');
+    setNewSantriNama('');
+    setNewSantriPin('');
+  };
+
+  const handleSaveSupabaseConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('mq_sb_url', sbUrl.trim());
+    localStorage.setItem('mq_sb_key', sbKey.trim());
+    localStorage.setItem('mq_logo_url', logoUrl.trim());
+    alert('Pengaturan Supabase & Logo berhasil disimpan!');
+    syncFromSupabase();
+  };
+
+  // ==========================================
+  // KOMPONEN HEADER & DRAWER NAVIGASI
+  // ==========================================
+  const renderHeader = () => (
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-4 py-3.5">
+      <div className="max-w-md mx-auto flex items-center justify-between">
+        <div
+          onClick={() => setCurrentView(user ? 'home' : 'auth')}
+          className="flex items-center gap-3 cursor-pointer"
+        >
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="Logo Markaz"
+              className="w-11 h-11 rounded-2xl object-contain bg-[#0A192F] p-1 border border-[#D4AF37]/50 shadow-sm"
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#0A192F] to-[#112240] border border-[#D4AF37]/60 flex items-center justify-center shadow-sm">
+              <span className="text-[#D4AF37] font-serif text-2xl font-bold leading-none">ق</span>
+            </div>
+          )}
+          <div>
+            <h1 className="font-bold text-[#0A192F] text-base leading-tight tracking-tight">
+              Markaz Al-Qur'an
+            </h1>
+            <p className="text-[10px] font-semibold tracking-widest uppercase text-[#B58E24]">
+              Abdurrahman bin 'Auf
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-[#0A192F] hover:bg-slate-50 transition"
+          aria-label="Buka Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      </div>
+    </header>
+  );
+
+  const renderDrawer = () => {
+    if (!drawerOpen) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-fadeIn">
+        <div className="w-4/5 max-w-sm bg-white h-full shadow-2xl p-6 flex flex-col justify-between overflow-y-auto">
+          <div>
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-[#0A192F]">
+                Menu Markaz Al-Qur'an
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Navigasi dan pengaturan dasar aplikasi.
+              </p>
+            </div>
+
+            <nav className="space-y-3">
+              <button
+                onClick={() => {
+                  setCurrentView(user ? 'home' : 'auth');
+                  setDrawerOpen(false);
+                }}
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-slate-200 text-left font-semibold text-sm text-[#0A192F] hover:border-[#D4AF37] hover:bg-amber-50/30 transition"
+              >
+                <Home className="w-4 h-4 text-[#B58E24]" />
+                <span>Beranda</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCurrentView('auth');
+                  setDrawerOpen(false);
+                }}
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-slate-200 text-left font-semibold text-sm text-[#0A192F] hover:border-[#D4AF37] hover:bg-amber-50/30 transition"
+              >
+                <UserCheck className="w-4 h-4 text-[#B58E24]" />
+                <span>Ubah identitas santri</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCurrentView(isGuruLoggedIn ? 'guru_dashboard' : 'guru_login');
+                  setDrawerOpen(false);
+                }}
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-slate-200 text-left font-semibold text-sm text-[#0A192F] hover:border-[#D4AF37] hover:bg-amber-50/30 transition"
+              >
+                <Shield className="w-4 h-4 text-[#B58E24]" />
+                <span>Panel Guru (akun guru)</span>
+              </button>
+
+              {user && (
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-slate-200 text-left font-semibold text-sm text-rose-700 hover:bg-rose-50 transition"
+                >
+                  <LogOut className="w-4 h-4 text-rose-600" />
+                  <span>Keluar akun santri</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  setCurrentView('about');
+                  setDrawerOpen(false);
+                }}
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-slate-200 text-left font-semibold text-sm text-[#0A192F] hover:border-[#D4AF37] hover:bg-amber-50/30 transition"
+              >
+                <Info className="w-4 h-4 text-[#B58E24]" />
+                <span>Tentang aplikasi</span>
+              </button>
+
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-slate-200 text-left font-semibold text-sm text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-4 h-4" />
+                <span>Tutup menu</span>
+              </button>
+            </nav>
+
+            <div className="mt-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex gap-3 items-start">
+              <Info className="w-5 h-5 text-[#B58E24] shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-600 leading-relaxed">
+                <strong>Bank Sambung Ayat 30 Juz:</strong> Tingkat Dasar (Juz 29–30), Menengah (Juz 21–30), dan Mahir (30 Juz). Audio murottal memerlukan internet.
+              </p>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-center text-slate-400 mt-6">
+            Markaz Al-Qur'an Abdurrahman bin 'Auf
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // ==========================================
+  // 1. LAYAR MASUK / ONBOARDING (GUEST & SANTRI)
+  // ==========================================
+  const renderAuthView = () => (
+    <div className="space-y-6">
+      {/* Banner Utama Navy & Gold */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0A192F] via-[#112240] to-[#1A365D] text-white p-6 shadow-lg border border-[#D4AF37]/30">
+        <div className="relative z-10">
+          <p className="text-[11px] font-bold tracking-widest uppercase text-[#D4AF37] mb-2">
+            ASSALAMU'ALAIKUM, SAHABAT AL-QUR'AN!
+          </p>
+          <h2 className="text-2xl font-extrabold leading-snug mb-3">
+            Belajar & Muraja'ah jadi lebih menyenangkan.
+          </h2>
+          <p className="text-xs text-slate-200 leading-relaxed">
+            Kenali tingkatan hafalanmu terlebih dahulu. Setelah itu, kita siap muraja'ah dan bertumbuh bersama di Markaz Al-Qur'an Abdurrahman bin 'Auf.
+          </p>
+        </div>
+        <Sparkles className="w-24 h-24 text-[#D4AF37]/10 absolute -bottom-4 -right-4 rotate-12" />
+      </div>
+
+      {/* Pilihan Mode Guest / Santri */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-[#0A192F] text-base">Masuk sebagai siapa?</h3>
+          <span className="text-xs text-slate-500">Guest atau Santri</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5 bg-slate-100 p-1.5 rounded-2xl">
+          <button
+            type="button"
+            onClick={() => {
+              setAuthTab('guest');
+              setAuthError('');
+            }}
+            className={`py-2.5 rounded-xl font-bold text-xs transition ${
+              authTab === 'guest'
+                ? 'bg-[#0A192F] text-[#D4AF37] shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Guest
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthTab('santri');
+              setAuthError('');
+            }}
+            className={`py-2.5 rounded-xl font-bold text-xs transition ${
+              authTab === 'santri'
+                ? 'bg-[#0A192F] text-[#D4AF37] shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Santri
+          </button>
+        </div>
+      </div>
+
+      {/* Form Guest */}
+      {authTab === 'guest' ? (
+        <form
+          onSubmit={handleGuestSubmit}
+          className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 space-y-5"
+        >
+          <div>
+            <label className="block text-xs font-bold text-[#0A192F] mb-2">
+              Nama lengkap santri
+            </label>
+            <input
+              type="text"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              placeholder="Tuliskan nama lengkapmu..."
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 text-sm focus:outline-none focus:border-[#0A192F] focus:ring-2 focus:ring-[#D4AF37]/30"
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2.5">
+              <label className="text-xs font-bold text-[#0A192F]">
+                Pilih tingkatan kelas
+              </label>
+              <span className="text-[11px] text-slate-500">Sesuaikan hafalanmu</span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5">
+              {(['Dasar', 'Menengah', 'Mahir'] as Tingkatan[]).map((lvl) => {
+                const selected = guestTingkatan === lvl;
+                return (
+                  <div
+                    key={lvl}
+                    onClick={() => setGuestTingkatan(lvl)}
+                    className={`p-3.5 rounded-2xl border cursor-pointer transition flex items-center justify-between ${
+                      selected
+                        ? 'border-[#0A192F] bg-[#0A192F]/5 ring-1 ring-[#D4AF37]'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-bold text-sm text-[#0A192F]">{lvl}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Cakupan: {TINGKATAN_INFO[lvl].desc}
+                      </p>
+                    </div>
+                    <div
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                        selected ? 'border-[#0A192F] bg-[#0A192F]' : 'border-slate-300'
+                      }`}
+                    >
+                      {selected && <div className="w-2 h-2 rounded-full bg-[#D4AF37]" />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Tingkatan menentukan cakupan juz soal Sambung Ayat (Dasar: Juz 29–30, Menengah: Juz 21–30, Mahir: 30 Juz).
+            </p>
+          </div>
+
+          {authError && (
+            <p className="text-xs font-semibold text-rose-600 bg-rose-50 p-3 rounded-xl">
+              {authError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            className="w-full py-3.5 rounded-2xl bg-[#0A192F] hover:bg-[#112240] text-[#D4AF37] font-bold text-sm shadow-md transition flex items-center justify-center gap-2 border border-[#D4AF37]/40"
+          >
+            <span>Simpan Identitas & Lanjutkan</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 flex gap-2.5 items-start">
+            <Lock className="w-4 h-4 text-[#B58E24] shrink-0 mt-0.5" />
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              <strong>Data tersimpan di perangkat & cloud.</strong> Nama, tingkatan santri, nilai ujian, dan bank soal tersimpan otomatis. Audio murottal memerlukan internet.
+            </p>
+          </div>
+        </form>
+      ) : (
+        /* Form Akun Santri (Kode & PIN) */
+        <form
+          onSubmit={handleSantriLogin}
+          className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-base text-[#0A192F]">Masuk akun santri</h4>
+            <span className="text-xs text-slate-400 font-medium">Belum masuk</span>
+          </div>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Akun santri diberikan ustadz/guru. Jika masuk, nilai ujian langsung tercatat di rapor guru Supabase. Tanpa akun, pakai mode Guest.
+          </p>
+
+          <div>
+            <label className="block text-xs font-bold text-[#0A192F] mb-1.5">
+              Kode santri
+            </label>
+            <input
+              type="text"
+              value={kodeSantriInput}
+              onChange={(e) => setKodeSantriInput(e.target.value)}
+              placeholder="Contoh: MQ-001"
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 text-sm focus:outline-none focus:border-[#0A192F]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[#0A192F] mb-1.5">
+              PIN santri
+            </label>
+            <input
+              type="password"
+              value={pinSantriInput}
+              onChange={(e) => setPinSantriInput(e.target.value)}
+              placeholder="Masukkan PIN (contoh tes: 1234)"
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 text-sm focus:outline-none focus:border-[#0A192F]"
+            />
+          </div>
+
+          {authError && (
+            <p className="text-xs font-semibold text-rose-600 bg-rose-50 p-3 rounded-xl">
+              {authError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-3.5 rounded-2xl bg-[#0A192F] hover:bg-[#112240] text-[#D4AF37] font-bold text-sm shadow-md transition border border-[#D4AF37]/40"
+          >
+            {isLoading ? 'Memeriksa Akun...' : 'Masuk akun santri'}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+
+  // ==========================================
+  // 2. LAYAR DASHBOARD UTAMA SANTRI
+  // ==========================================
+  const renderHomeView = () => {
+    if (!user) return null;
+    return (
+      <div className="space-y-6">
+        {/* Banner Sambutan */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0A192F] via-[#112240] to-[#1A365D] text-white p-6 shadow-lg border border-[#D4AF37]/30">
+          <div className="relative z-10">
+            <p className="text-[11px] font-bold tracking-widest uppercase text-[#D4AF37] mb-2">
+              ALHAMDULILLAH, KAMU SUDAH SIAP!
+            </p>
+            <h2 className="text-2xl font-extrabold leading-snug mb-2.5">
+              Setiap ilmu adalah langkah kebaikan.
+            </h2>
+            <p className="text-xs text-slate-200 leading-relaxed">
+              Terus semangat muraja'ah, memperbaiki bacaan, dan mengamalkan Al-Qur'an bersama Markaz Al-Qur'an Abdurrahman bin 'Auf.
+            </p>
+          </div>
+          <Sparkles className="w-24 h-24 text-[#D4AF37]/10 absolute -bottom-4 -right-4" />
+        </div>
+
+        {/* Sapaan Santri & Badge Tingkatan */}
+        <div>
+          <p className="text-xs text-slate-500">Selamat datang kembali,</p>
+          <h3 className="text-2xl font-extrabold text-[#0A192F] mt-0.5">{user.nama}</h3>
+
+          <div className="flex items-center gap-2.5 mt-3">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-100/80 border border-[#D4AF37]/50 text-[#0A192F] text-xs font-bold">
+              <Sparkles className="w-3.5 h-3.5 text-[#B58E24]" />
+              Tingkat {user.tingkatan} ({TINGKATAN_INFO[user.tingkatan].desc})
+            </span>
+            <button
+              onClick={handleLogout}
+              className="px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100"
+            >
+              Keluar
+            </button>
+          </div>
+        </div>
+
+        {/* Kartu Status Akun Santri */}
+        <div className="bg-white rounded-3xl p-4 border border-slate-200/80 flex items-center justify-between shadow-2xs">
+          <div>
+            <p className="font-bold text-sm text-[#0A192F]">Akun Santri</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {user.mode === 'santri'
+                ? `Terhubung (${user.kode_santri})`
+                : 'Mode Guest (Belum masuk akun kode santri)'}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setAuthTab('santri');
+              setCurrentView('auth');
+            }}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-[#0A192F] hover:border-[#D4AF37]"
+          >
+            Kelola akun
+          </button>
+        </div>
+
+        {/* Grid Ruang Belajar */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-extrabold text-lg text-[#0A192F]">Ruang Belajar</h4>
+            <span className="text-xs font-semibold text-[#B58E24]">Siap digunakan</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3.5">
+            {/* Kuis Hafalan */}
+            <div
+              onClick={() => {
+                setQuizType('Sambung Ayat');
+                setCurrentView('study_setup');
+              }}
+              className="bg-white rounded-3xl p-4 border border-slate-200/90 hover:border-[#D4AF37] shadow-2xs cursor-pointer transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="w-11 h-11 rounded-2xl bg-[#0A192F]/5 border border-[#D4AF37]/40 flex items-center justify-center mb-3">
+                  <BookOpen className="w-5 h-5 text-[#0A192F]" />
+                </div>
+                <h5 className="font-bold text-sm text-[#0A192F]">Kuis Hafalan</h5>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Sambung ayat dan muraja'ah Al-Qur'an ({TINGKATAN_INFO[user.tingkatan].desc}).
+                </p>
+              </div>
+              <span className="inline-block mt-3 px-2.5 py-1 rounded-lg bg-amber-100/70 text-[#8A6914] text-[10px] font-bold w-fit">
+                Mulai Kuis →
+              </span>
+            </div>
+
+            {/* Pengetahuan Agama */}
+            <div
+              onClick={() => {
+                setQuizType('Pengetahuan Agama');
+                setCurrentView('study_setup');
+              }}
+              className="bg-white rounded-3xl p-4 border border-slate-200/90 hover:border-[#D4AF37] shadow-2xs cursor-pointer transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="w-11 h-11 rounded-2xl bg-[#0A192F]/5 border border-[#D4AF37]/40 flex items-center justify-center mb-3">
+                  <Sparkles className="w-5 h-5 text-[#B58E24]" />
+                </div>
+                <h5 className="font-bold text-sm text-[#0A192F]">Pengetahuan Agama</h5>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Belajar tajwid, ulumul Qur'an, sirah, dan adab.
+                </p>
+              </div>
+              <span className="inline-block mt-3 px-2.5 py-1 rounded-lg bg-amber-100/70 text-[#8A6914] text-[10px] font-bold w-fit">
+                Mulai Kuis →
+              </span>
+            </div>
+
+            {/* Rapor & Klasemen */}
+            <div
+              onClick={() => setCurrentView('rapor')}
+              className="bg-white rounded-3xl p-4 border border-slate-200/90 hover:border-[#D4AF37] shadow-2xs cursor-pointer transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="w-11 h-11 rounded-2xl bg-[#0A192F]/5 border border-[#D4AF37]/40 flex items-center justify-center mb-3">
+                  <Award className="w-5 h-5 text-[#B58E24]" />
+                </div>
+                <h5 className="font-bold text-sm text-[#0A192F]">Rapor & Klasemen</h5>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Lihat riwayat nilai ujian dan peringkat santri.
+                </p>
+              </div>
+              <span className="inline-block mt-3 px-2.5 py-1 rounded-lg bg-[#0A192F] text-[#D4AF37] text-[10px] font-bold w-fit">
+                Rapor santri
+              </span>
+            </div>
+
+            {/* Tantangan Pekanan */}
+            <div
+              onClick={() => {
+                setStudyMode('Ujian / Setoran');
+                setQuizType('Sambung Ayat');
+                setQuestionCount(10);
+                setCurrentView('study_setup');
+              }}
+              className="bg-white rounded-3xl p-4 border border-slate-200/90 hover:border-[#D4AF37] shadow-2xs cursor-pointer transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="w-11 h-11 rounded-2xl bg-[#0A192F]/5 border border-[#D4AF37]/40 flex items-center justify-center mb-3">
+                  <Trophy className="w-5 h-5 text-[#0A192F]" />
+                </div>
+                <h5 className="font-bold text-sm text-[#0A192F]">Tantangan Pekanan</h5>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Latihan dan evaluasi setoran pekanan secara bertahap.
+                </p>
+              </div>
+              <span className="inline-block mt-3 px-2.5 py-1 rounded-lg bg-amber-100/70 text-[#8A6914] text-[10px] font-bold w-fit">
+                Ujian 10 Soal
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Kartu Identitas Santri Bawah */}
+        <div>
+          <h4 className="font-extrabold text-base text-[#0A192F] mb-2.5">Identitas Santri</h4>
+          <div className="bg-white rounded-3xl p-4 border border-slate-200/80 flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-[#0A192F] text-[#D4AF37] font-extrabold text-base flex items-center justify-center">
+                {user.nama.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-bold text-sm text-[#0A192F]">{user.nama}</p>
+                <p className="text-xs text-slate-500">Tingkat {user.tingkatan}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setCurrentView('auth')}
+              className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-[#0A192F] hover:bg-slate-50"
+            >
+              Ubah
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ==========================================
+  // 3. LAYAR KONFIGURASI RUANG BELAJAR
+  // ==========================================
+  const renderStudySetupView = () => {
+    if (!user) return null;
+    return (
+      <div className="space-y-6">
+        <button
+          onClick={() => setCurrentView('home')}
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#0A192F] hover:text-[#B58E24]"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Kembali ke beranda</span>
+        </button>
+
+        {/* Banner Ruang Belajar */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0A192F] via-[#112240] to-[#1A365D] text-white p-6 shadow-lg border border-[#D4AF37]/30">
+          <p className="text-[11px] font-bold tracking-widest uppercase text-[#D4AF37] mb-1.5">
+            RUANG BELAJAR • TINGKAT {user.tingkatan.toUpperCase()}
+          </p>
+          <h2 className="text-2xl font-extrabold mb-2">Pilih cara belajarmu.</h2>
+          <p className="text-xs text-slate-200 leading-relaxed">
+            Belajar dengan tenang, teliti, dan penuh semangat. Cakupan hafalanmu: <strong>{TINGKATAN_INFO[user.tingkatan].desc}</strong>.
+          </p>
+        </div>
+
+        {/* Pilihan Mode Belajar */}
+        <div>
+          <h3 className="font-extrabold text-base text-[#0A192F] mb-3">Mode belajar</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div
+              onClick={() => setStudyMode('Latihan Bebas')}
+              className={`p-4 rounded-3xl border cursor-pointer transition ${
+                studyMode === 'Latihan Bebas'
+                  ? 'border-[#0A192F] bg-[#0A192F]/5 ring-2 ring-[#D4AF37]'
+                  : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="text-2xl mb-2">🌱</div>
+              <h4 className="font-bold text-sm text-[#0A192F]">Latihan Bebas</h4>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                Jawaban langsung dikoreksi di setiap soal. Cocok untuk muraja'ah mandiri.
+              </p>
+            </div>
+
+            <div
+              onClick={() => setStudyMode('Ujian / Setoran')}
+              className={`p-4 rounded-3xl border cursor-pointer transition ${
+                studyMode === 'Ujian / Setoran'
+                  ? 'border-[#0A192F] bg-[#0A192F]/5 ring-2 ring-[#D4AF37]'
+                  : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="text-2xl mb-2">📝</div>
+              <h4 className="font-bold text-sm text-[#0A192F]">Ujian / Setoran</h4>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                Kunci jawaban ditampilkan di akhir. Nilai langsung masuk rapor santri.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Pilihan Jenis Kuis */}
+        <div>
+          <h3 className="font-extrabold text-base text-[#0A192F] mb-3">Jenis kuis</h3>
+          <div className="space-y-2.5">
+            <div
+              onClick={() => setQuizType('Sambung Ayat')}
+              className={`p-4 rounded-2xl border cursor-pointer transition flex items-center gap-3.5 ${
+                quizType === 'Sambung Ayat'
+                  ? 'border-[#0A192F] bg-[#0A192F]/5 ring-1 ring-[#D4AF37]'
+                  : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="text-2xl">📖</div>
+              <div>
+                <h4 className="font-bold text-sm text-[#0A192F]">
+                  Kuis Hafalan — Sambung Ayat
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Melanjutkan ayat Al-Qur'an ({TINGKATAN_INFO[user.tingkatan].desc}) + Audio Murottal.
+                </p>
+              </div>
+            </div>
+
+            <div
+              onClick={() => setQuizType('Pengetahuan Agama')}
+              className={`p-4 rounded-2xl border cursor-pointer transition flex items-center gap-3.5 ${
+                quizType === 'Pengetahuan Agama'
+                  ? 'border-[#0A192F] bg-[#0A192F]/5 ring-1 ring-[#D4AF37]'
+                  : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="text-2xl">🕌</div>
+              <div>
+                <h4 className="font-bold text-sm text-[#0A192F]">
+                  Kuis Pengetahuan Agama
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Soal tajwid, ulumul Qur'an, sirah nabawiyah, dan adab penuntut ilmu.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pilihan Jumlah Soal */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-extrabold text-base text-[#0A192F]">Jumlah soal</h3>
+            <span className="text-xs text-slate-500">{TINGKATAN_INFO[user.tingkatan].desc}</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2.5">
+            {([5, 10, 40] as const).map((cnt) => (
+              <button
+                key={cnt}
+                type="button"
+                onClick={() => setQuestionCount(cnt)}
+                className={`py-3 rounded-2xl font-bold text-xs border transition ${
+                  questionCount === cnt
+                    ? 'bg-[#0A192F] text-[#D4AF37] border-[#D4AF37]'
+                    : 'bg-white text-[#0A192F] border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {cnt} Soal
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tombol Mulai Kuis */}
+        <button
+          type="button"
+          onClick={startQuiz}
+          disabled={isGeneratingQuiz}
+          className="w-full py-4 rounded-2xl bg-[#0A192F] hover:bg-[#112240] text-[#D4AF37] font-extrabold text-sm shadow-lg border border-[#D4AF37]/50 transition flex items-center justify-center gap-2"
+        >
+          {isGeneratingQuiz ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Menyiapkan Ayat & Audio ({user.tingkatan})...</span>
+            </>
+          ) : (
+            <>
+              <span>Mulai {studyMode} Sekarang</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+      </div>
+    );
+  };
+
+  // ==========================================
+  // 4. LAYAR PENGERJAAN KUIS INTERAKTIF
+  // ==========================================
+  const renderQuizActiveView = () => {
+    const q = questions[currentQIndex];
+    if (!q) return null;
+
+    return (
+      <div className="space-y-5">
+        <audio
+          ref={audioRef}
+          onEnded={() => setIsPlayingAudio(false)}
+          className="hidden"
+        />
+
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => {
+              if (audioRef.current) audioRef.current.pause();
+              setCurrentView('study_setup');
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#0A192F]"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Batalkan</span>
+          </button>
+          <span className="px-3 py-1 rounded-full bg-[#0A192F] text-[#D4AF37] text-xs font-bold">
+            Soal {currentQIndex + 1} / {questions.length}
+          </span>
+        </div>
+
+        {/* Kartu Pertanyaan & Ayat */}
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#B58E24]">
+              {studyMode} • Tingkat {user?.tingkatan}
+            </span>
+            {q.surahName && (
+              <span className="text-xs font-semibold text-slate-500">
+                {q.surahName} : {q.ayahNumber}
+              </span>
+            )}
+          </div>
+
+          <p className="text-sm font-bold text-[#0A192F]">{q.questionText}</p>
+
+          {q.arabicPrompt && (
+            <div className="p-5 rounded-2xl bg-slate-50 border border-[#D4AF37]/40 text-right">
+              <p
+                dir="rtl"
+                className="text-2xl leading-loose font-serif text-[#0A192F]"
+              >
+                {q.arabicPrompt}
+              </p>
+            </div>
+          )}
+
+          {q.audioUrl && (
+            <button
+              type="button"
+              onClick={() => toggleAudio(q.audioUrl)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0A192F] text-[#D4AF37] text-xs font-bold shadow-xs hover:bg-[#112240] transition"
+            >
+              {isPlayingAudio ? (
+                <>
+                  <Pause className="w-4 h-4" />
+                  <span>Jeda Murottal</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-4 h-4" />
+                  <span>Putar Audio Murottal Ayat</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Pilihan Jawaban A, B, C, D */}
+        <div className="space-y-2.5">
+          {q.options.map((opt, idx) => {
+            const isSelected = selectedOption === idx;
+            const isCorrect = idx === q.correctIndex;
+            let btnStyle = 'bg-white border-slate-200 text-[#0A192F] hover:border-[#0A192F]';
+
+            if (studyMode === 'Latihan Bebas' && isAnswerSubmitted) {
+              if (isCorrect) {
+                btnStyle = 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-1 ring-emerald-500';
+              } else if (isSelected && !isCorrect) {
+                btnStyle = 'bg-rose-50 border-rose-500 text-rose-900';
+              }
+            } else if (isSelected) {
+              btnStyle = 'bg-[#0A192F] text-[#D4AF37] border-[#D4AF37]';
+            }
+
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSelectOption(idx)}
+                className={`w-full p-4 rounded-2xl border text-left transition flex items-center justify-between gap-3 ${btnStyle}`}
+              >
+                <span className="w-7 h-7 rounded-lg bg-black/10 flex items-center justify-center font-bold text-xs shrink-0">
+                  {String.fromCharCode(65 + idx)}
+                </span>
+                <span
+                  dir={q.arabicPrompt ? 'rtl' : 'ltr'}
+                  className={`flex-1 ${
+                    q.arabicPrompt ? 'text-xl font-serif leading-relaxed text-right' : 'text-sm font-semibold'
+                  }`}
+                >
+                  {opt}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Umpan Balik Langsung (Khusus Mode Latihan Bebas) */}
+        {studyMode === 'Latihan Bebas' && isAnswerSubmitted && (
+          <div
+            className={`p-4 rounded-2xl border text-xs leading-relaxed ${
+              selectedOption === q.correctIndex
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}
+          >
+            <p className="font-bold mb-1">
+              {selectedOption === q.correctIndex
+                ? 'Mumtaz! Jawabanmu Benar.'
+                : 'Kurang tepat. Tetap semangat muraja’ah!'}
+            </p>
+            <p>{q.explanation}</p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          disabled={selectedOption === null}
+          onClick={handleNextQuestion}
+          className="w-full py-3.5 rounded-2xl bg-[#0A192F] disabled:opacity-40 text-[#D4AF37] font-bold text-sm shadow-md transition"
+        >
+          {currentQIndex + 1 === questions.length ? 'Selesaikan & Lihat Nilai' : 'Soal Berikutnya →'}
+        </button>
+      </div>
+    );
+  };
+
+  // ==========================================
+  // 5. LAYAR HASIL KUIS & RAPOR SANTRI
+  // ==========================================
+  const renderQuizResultView = () => {
+    const latest = localScores[0];
+    if (!latest) return null;
+
+    return (
+      <div className="space-y-6 text-center">
+        <div className="bg-gradient-to-br from-[#0A192F] to-[#112240] text-white p-7 rounded-3xl border border-[#D4AF37]/40 shadow-lg">
+          <Trophy className="w-14 h-14 text-[#D4AF37] mx-auto mb-3" />
+          <p className="text-xs uppercase tracking-widest text-[#D4AF37] font-bold">
+            HASIL {latest.mode_belajar.toUpperCase()}
+          </p>
+          <h2 className="text-4xl font-extrabold my-2 text-white">{latest.skor}</h2>
+          <p className="text-xs text-slate-300">
+            Benar {latest.benar} dari {latest.jumlah_soal} Soal • Tingkat {latest.tingkatan}
+          </p>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => setCurrentView('study_setup')}
+            className="flex-1 py-3.5 rounded-2xl bg-white border border-slate-300 font-bold text-xs text-[#0A192F]"
+          >
+            Ulangi Kuis
+          </button>
+          <button
+            onClick={() => setCurrentView('rapor')}
+            className="flex-1 py-3.5 rounded-2xl bg-[#0A192F] text-[#D4AF37] font-bold text-xs"
+          >
+            Buka Rapor Santri
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRaporView = () => {
+    const combinedScores = isSupabaseConfigured && allScores.length > 0 ? allScores : localScores;
+    return (
+      <div className="space-y-5">
+        <button
+          onClick={() => setCurrentView('home')}
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#0A192F]"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Kembali ke beranda</span>
+        </button>
+
+        <div className="bg-gradient-to-br from-[#0A192F] to-[#112240] text-white p-6 rounded-3xl border border-[#D4AF37]/40">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-[#D4AF37]">
+            EVALUASI & KLASEMEN
+          </p>
+          <h2 className="text-xl font-extrabold mt-1">Rapor & Riwayat Nilai</h2>
+          <p className="text-xs text-slate-300 mt-1">
+            Catatan hasil latihan dan setoran ujian santri Markaz Al-Qur'an.
+          </p>
+        </div>
+
+        {combinedScores.length === 0 ? (
+          <div className="bg-white rounded-3xl p-6 text-center border border-slate-200">
+            <p className="text-sm font-bold text-[#0A192F]">Belum ada nilai tercatat</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Silakan kerjakan Kuis Hafalan atau Pengetahuan Agama terlebih dahulu.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {combinedScores.map((item, idx) => (
+              <div
+                key={idx}
+                className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-[#0A192F]">{item.nama_santri}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-[#8A6914] text-[10px] font-bold">
+                      {item.tingkatan}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {item.jenis_kuis} ({item.mode_belajar}) • Benar {item.benar}/{item.jumlah_soal}
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-[#0A192F] text-[#D4AF37] flex items-center justify-center font-extrabold text-base">
+                  {item.skor}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ==========================================
+  // 6. LAYAR PANEL GURU (LOGIN & DASHBOARD SUPABASE)
+  // ==========================================
+  const renderGuruLoginView = () => (
+    <div className="space-y-6">
+      <button
+        onClick={() => setCurrentView(user ? 'home' : 'auth')}
+        className="inline-flex items-center gap-2 text-xs font-bold text-[#0A192F]"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Kembali ke beranda</span>
+      </button>
+
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0A192F] via-[#112240] to-[#1A365D] text-white p-6 shadow-lg border border-[#D4AF37]/30">
+        <p className="text-[11px] font-bold tracking-widest uppercase text-[#D4AF37] mb-1.5">
+          RUANG PENGAJAR
+        </p>
+        <h2 className="text-2xl font-extrabold mb-2">Panel Guru</h2>
+        <p className="text-xs text-slate-200 leading-relaxed">
+          Pantau perkembangan belajar, kelola Kode & PIN santri, dan buka rapor setiap santri.
+        </p>
+      </div>
+
+      <form
+        onSubmit={handleGuruLogin}
+        className="bg-white rounded-3xl p-5 border border-slate-200 space-y-4"
+      >
+        <div>
+          <h3 className="font-extrabold text-lg text-[#0A192F]">Masuk sebagai pengajar</h3>
+          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+            Akun guru/admin (bukan akun santri). Akun ini membuka rapor, kelola santri, dan koneksi database Supabase.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-[#0A192F] mb-1.5">Email</label>
+          <input
+            type="email"
+            value={guruEmail}
+            onChange={(e) => setGuruEmail(e.target.value)}
+            placeholder="ustadz@markaz.id"
+            className="w-full px-4 py-3 rounded-2xl border border-slate-300 text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-[#0A192F] mb-1.5">Kata sandi</label>
+          <input
+            type="password"
+            value={guruPass}
+            onChange={(e) => setGuruPass(e.target.value)}
+            placeholder="Kata sandi akun guru"
+            className="w-full px-4 py-3 rounded-2xl border border-slate-300 text-sm"
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="w-full py-3.5 rounded-2xl bg-[#0A192F] text-[#D4AF37] font-bold text-sm shadow-md"
+        >
+          Masuk ke panel guru
+        </button>
+      </form>
+    </div>
+  );
+
+  const renderGuruDashboardView = () => {
+    const scoresToDisplay = isSupabaseConfigured && allScores.length > 0 ? allScores : localScores;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setCurrentView(user ? 'home' : 'auth')}
+            className="inline-flex items-center gap-2 text-xs font-bold text-[#0A192F]"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Beranda</span>
+          </button>
+          <span className="px-3 py-1 rounded-full bg-amber-100 text-[#8A6914] text-xs font-bold">
+            Mode Pengajar Aktif
+          </span>
+        </div>
+
+        {/* Tab Navigasi Guru */}
+        <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+          <button
+            onClick={() => setGuruTab('rapor')}
+            className={`py-2.5 rounded-xl font-bold text-xs ${
+              guruTab === 'rapor' ? 'bg-[#0A192F] text-[#D4AF37]' : 'bg-white text-slate-700'
+            }`}
+          >
+            Rapor Nilai
+          </button>
+          <button
+            onClick={() => setGuruTab('santri')}
+            className={`py-2.5 rounded-xl font-bold text-xs ${
+              guruTab === 'santri' ? 'bg-[#0A192F] text-[#D4AF37]' : 'bg-white text-slate-700'
+            }`}
+          >
+            Data Santri
+          </button>
+          <button
+            onClick={() => setGuruTab('pengaturan')}
+            className={`py-2.5 rounded-xl font-bold text-xs ${
+              guruTab === 'pengaturan' ? 'bg-[#0A192F] text-[#D4AF37]' : 'bg-white text-slate-700'
+            }`}
+          >
+            Supabase & Logo
+          </button>
+        </div>
+
+        {/* Tab 1: Rekap Rapor Santri */}
+        {guruTab === 'rapor' && (
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base text-[#0A192F]">Rekap Nilai Seluruh Santri</h3>
+              <button
+                onClick={syncFromSupabase}
+                className="text-xs font-bold text-[#B58E24] flex items-center gap-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Segarkan
+              </button>
+            </div>
+
+            {scoresToDisplay.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">
+                Belum ada data nilai santri yang masuk.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {scoresToDisplay.map((r, i) => (
+                  <div
+                    key={i}
+                    className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="font-bold text-sm text-[#0A192F]">
+                        {r.nama_santri}{' '}
+                        <span className="text-xs font-normal text-slate-500">
+                          ({r.kode_santri || 'GUEST'})
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Tingkat {r.tingkatan} • {r.jenis_kuis} • {r.mode_belajar}
+                      </p>
+                    </div>
+                    <span className="px-3 py-1.5 rounded-xl bg-[#0A192F] text-[#D4AF37] font-extrabold text-sm">
+                      {r.skor}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: Kelola Kode & PIN Santri */}
+        {guruTab === 'santri' && (
+          <div className="space-y-4">
+            <form
+              onSubmit={handleAddSantri}
+              className="bg-white rounded-3xl p-5 border border-slate-200 space-y-3.5"
+            >
+              <h3 className="font-bold text-sm text-[#0A192F]">Tambah Akun Santri Baru</h3>
+              <div className="grid grid-cols-2 gap-2.5">
+                <input
+                  type="text"
+                  placeholder="Kode (mis: MQ-004)"
+                  value={newSantriKode}
+                  onChange={(e) => setNewSantriKode(e.target.value)}
+                  className="px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
+                />
+                <input
+                  type="text"
+                  placeholder="PIN (mis: 1234)"
+                  value={newSantriPin}
+                  onChange={(e) => setNewSantriPin(e.target.value)}
+                  className="px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Nama lengkap santri"
+                value={newSantriNama}
+                onChange={(e) => setNewSantriNama(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
+              />
+              <select
+                value={newSantriTingkatan}
+                onChange={(e) => setNewSantriTingkatan(e.target.value as Tingkatan)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-[#0A192F]"
+              >
+                <option value="Dasar">Tingkat Dasar (Juz 29 & 30)</option>
+                <option value="Menengah">Tingkat Menengah (Juz 21 - 30)</option>
+                <option value="Mahir">Tingkat Mahir (30 Juz)</option>
+              </select>
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-[#0A192F] text-[#D4AF37] font-bold text-xs"
+              >
+                + Simpan Akun Santri
+              </button>
+            </form>
+
+            <div className="bg-white rounded-3xl p-5 border border-slate-200 space-y-2.5">
+              <h4 className="font-bold text-sm text-[#0A192F]">Daftar Akun Santri Aktif</h4>
+              {santriList.map((s, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs"
+                >
+                  <div>
+                    <p className="font-bold text-[#0A192F]">{s.nama_lengkap}</p>
+                    <p className="text-slate-500">
+                      Kode: <strong>{s.kode_santri}</strong> • PIN: <strong>{s.pin_santri}</strong>
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-[#8A6914] font-bold">
+                    {s.tingkatan}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Koneksi Supabase & Ganti Logo */}
+        {guruTab === 'pengaturan' && (
+          <form
+            onSubmit={handleSaveSupabaseConfig}
+            className="bg-white rounded-3xl p-5 border border-slate-200 space-y-4"
+          >
+            <h3 className="font-bold text-sm text-[#0A192F]">
+              Koneksi Database Supabase & Logo Markaz
+            </h3>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                URL Logo Markaz (Opsional)
+              </label>
+              <input
+                type="text"
+                value={logoUrl}
+                onChange={(e) => setLogoUrl(e.target.value)}
+                placeholder="https://.../logo.png"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Supabase Project URL
+              </label>
+              <input
+                type="text"
+                value={sbUrl}
+                onChange={(e) => setSbUrl(e.target.value)}
+                placeholder="https://xxxx.supabase.co"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Supabase Anon Public Key
+              </label>
+              <input
+                type="password"
+                value={sbKey}
+                onChange={(e) => setSbKey(e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5c..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full py-3 rounded-xl bg-[#0A192F] text-[#D4AF37] font-bold text-xs"
+            >
+              Simpan Konfigurasi
+            </button>
+          </form>
+        )}
+      </div>
+    );
+  };
+
+  // ==========================================
+  // RENDER UTAMA
+  // ==========================================
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans">
+      {renderHeader()}
+      {renderDrawer()}
+
+      <main className="flex-1 max-w-md w-full mx-auto px-4 py-6">
+        {currentView === 'auth' && renderAuthView()}
+        {currentView === 'home' && renderHomeView()}
+        {currentView === 'study_setup' && renderStudySetupView()}
+        {currentView === 'quiz_active' && renderQuizActiveView()}
+        {currentView === 'quiz_result' && renderQuizResultView()}
+        {currentView === 'rapor' && renderRaporView()}
+        {currentView === 'guru_login' && renderGuruLoginView()}
+        {currentView === 'guru_dashboard' && renderGuruDashboardView()}
+        {currentView === 'about' && (
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-3">
+            <h2 className="font-extrabold text-lg text-[#0A192F]">
+              Markaz Al-Qur'an Abdurrahman bin 'Auf
+            </h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Aplikasi evaluasi hafalan (Sambung Ayat 30 Juz) dan Pengetahuan Agama Islam dengan pembagian tingkatan Dasar (Juz 29–30), Menengah (Juz 21–30), dan Mahir (30 Juz).
+            </p>
+            <button
+              onClick={() => setCurrentView(user ? 'home' : 'auth')}
+              className="px-4 py-2 rounded-xl bg-[#0A192F] text-[#D4AF37] text-xs font-bold"
+            >
+              Kembali
+            </button>
+          </div>
+        )}
+      </main>
+
+      <footer className="py-6 text-center text-[11px] text-slate-400 space-y-1 border-t border-slate-200/60 bg-white">
+        <p className="font-semibold text-[#0A192F]">
+          Markaz Al-Qur'an Abdurrahman bin 'Auf • Belajar, Muraja'ah, Bertumbuh
+        </p>
+        <p>Teks Ayat: AlQuran Cloud / Quran.com • Audio: Mishary Rashid Al-Afasy</p>
+      </footer>
+    </div>
+  );
+}

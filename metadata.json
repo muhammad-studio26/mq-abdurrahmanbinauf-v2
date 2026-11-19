@@ -1,0 +1,6 @@
+{
+  "name": "Markaz Al-Qur'an Abdurrahman bin 'Auf",
+  "description": "Aplikasi belajar, muraja'ah sambung ayat 30 juz dengan audio murottal, dan evaluasi pengetahuan agama Islam.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
