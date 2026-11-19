@@ -41,7 +41,7 @@ import type {
 const DEFAULT_SUPABASE_URL = 'https://apkgfohyuelocrmedbts.supabase.co';
 const DEFAULT_SUPABASE_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwa2dmb2h5dWVsb2NybWVkYnRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NDI0ODgsImV4cCI6MjExMDQxODQ4OH0.gzE9rlawqk5eEIFD-Vp_qmNSs_K71oHQbtJSbYRyeSs';
-const DEFAULT_LOGO_URL = '';
+const DEFAULT_LOGO_URL = 'https://apkgfohyuelocrmedbts.supabase.co/storage/v1/object/public/Assets/logo.png';
 
 const GURU_SESSION_KEY = 'mq_guru_session';
 
